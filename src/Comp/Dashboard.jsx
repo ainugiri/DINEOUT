@@ -11,14 +11,14 @@ const menuItems = [
     { title: "SETTINGS", color: "#ffa500", hover: "#9370db", path: "/Pages/settings" },
     { title: "EMPLOYEE MGMT", color: "#20b2aa", hover: "#ff6f61", path: "/Pages/employee" },
     { title: "STOCK", color: "#ff4500", hover: "#ff6f61", path: "/Pages/stock" },
-    { title: "ORDERS", color: "#3cb371", hover: "#6a5acd", path: "/Pages/orders" },
+    { title: "ORDERS", color: "#3cb371", hover: "#6a5acd", path: "/orders" },
     { title: "CUSTOMERS", color: "#9370db", hover: "#20b2aa", path: "/Pages/customers" }
 ];
 
   return (
     <div style={styles.page}>
       <header style={styles.header}>
-        <h1 style={{ margin: 0 }}>🍽 Dine Out Cafeteria</h1>
+        <h1 style={{ margin: 0 }}>🍽️ Dine Out Cafeteria - Biriyani Master </h1>
         <h2 style={{ margin: 0 }}>Your one-stop solution for Biriyani Hunters</h2>
       </header>
 

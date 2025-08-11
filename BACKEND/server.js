@@ -73,4 +73,33 @@ app.post("/login", (req, res) => {
   });
 });
 
+// sales insert
+app.post("/sales", async (req, res) => {
+  const { total_amount, cash_amount, upi_amount, card_amount, items } = req.body;
+
+  try {
+    // Insert into sales table
+    const [saleResult] = await db.query(
+      "INSERT INTO sales (total_amount, cash_amount, upi_amount, card_amount) VALUES (?, ?, ?, ?)",
+      [total_amount, cash_amount, upi_amount, card_amount]
+    );
+
+    const saleId = saleResult.insertId;
+
+    // Insert each item
+    for (const item of items) {
+      await db.query(
+        "INSERT INTO sale_items (sale_id, product_id, product_name, quantity, price, total) VALUES (?, ?, ?, ?, ?, ?)",
+        [saleId, item.product_id, item.product_name, item.quantity, item.price, item.total]
+      );
+    }
+
+    res.json({ success: true, sale_id: saleId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Database error" });
+  }
+});
+
+
 app.listen(5000, () => console.log("🚀 Server running on port 5000"));
