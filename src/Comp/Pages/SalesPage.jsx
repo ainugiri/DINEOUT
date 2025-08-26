@@ -12,6 +12,7 @@ export default function SalesPage() {
   const [card, setCard] = useState(0);
   const receiptRef = useRef();
 
+
   // Fetch by ID
   useEffect(() => {
     const fetchById = async () => {
@@ -56,38 +57,71 @@ export default function SalesPage() {
     setQty(1);
     setResults([]);
   };
+
+  const updateCartItem = (index, newQty) => {
+  if (newQty <= 0) return; // avoid invalid qty
+  const updatedCart = [...cart];
+  updatedCart[index].qty = newQty;
+  updatedCart[index].rowTotal = updatedCart[index].price * newQty;
+  setCart(updatedCart);
+};
+
+
+
+const deleteCartItem = (index) => {
+  const updatedCart = cart.filter((_, idx) => idx !== index);
+  setCart(updatedCart);
+};
+
 const handleSubmit = async () => {
   if (overallTotal <= 0) {
     alert("No items to save!");
     return;
   }
 
-  // Prepare sale data
+  // First: Insert into Sales table
   const saleData = {
     total_amount: overallTotal,
     cash_amount: cash,
     upi_amount: upi,
     card_amount: card,
-    items: cart.map(item => ({
-      product_id: item.item_id,
-      product_name: item.item_name,
-      quantity: item.qty,
-      price: item.price,
-      total: item.rowTotal
-    }))
   };
 
   try {
-    const res = await fetch("http://localhost:5000/sales", {
+    // Save sale first
+    const saleRes = await fetch("http://localhost:5000/sales", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(saleData)
+      body: JSON.stringify(saleData),
     });
 
-    if (!res.ok) throw new Error("Failed to save sale");
+    if (!saleRes.ok) throw new Error("Failed to save sale");
+
+    // Get newly created sale_id
+    const { sale_id } = await saleRes.json();
+
+    // Then save items into sale_items
+    for (const item of cart) {
+      const itemData = {
+        sale_id: sale_id,
+        menu_id: item.item_id, // menu_id from menu table
+        quantity: item.qty,
+        price: item.price,
+        total: item.rowTotal,
+      };
+
+      const itemRes = await fetch("http://localhost:5000/sale_items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(itemData),
+      });
+
+      if (!itemRes.ok) throw new Error("Failed to save item");
+    }
 
     alert("Sale saved successfully!");
     handlePrint(); // Print after saving
+
   } catch (err) {
     alert(err.message);
   }
@@ -158,6 +192,8 @@ const handleClear = () => {
     setUpi(0);
     setCard(0);
   };
+  const paymentTotal = cash + upi + card;
+  const isPaymentValid = paymentTotal === overallTotal;
 
   return (
     <div style={{ padding: "20px", maxWidth: "900px", margin: "0 auto", fontFamily: "Arial" }}>
@@ -236,14 +272,15 @@ const handleClear = () => {
         <div>
           <div ref={receiptRef}>
           <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "10px" }}>
-            <thead>
-              <tr style={{ backgroundColor: "#3498db", color: "#fff" }}>
-                <th style={{ padding: "8px", textAlign:"left" }}>Item</th>
-                <th style={{ padding: "8px", textAlign:"left" }}>Qty</th>
-                <th style={{ padding: "8px", textAlign:"left" }}>Price</th>
-                <th style={{ padding: "8px", textAlign:"left" }}>Total</th>
-              </tr>
-            </thead>
+<thead>
+  <tr style={{ backgroundColor: "#3498db", color: "#fff" }}>
+    <th style={{ padding: "8px", textAlign:"left" }}>Item</th>
+    <th style={{ padding: "8px", textAlign:"left" }}>Qty</th>
+    <th style={{ padding: "8px", textAlign:"left" }}>Price</th>
+    <th style={{ padding: "8px", textAlign:"left" }}>Total</th>
+    <th style={{ padding: "8px", textAlign:"center" }}>Action</th>
+  </tr>
+</thead>
               <tbody>
                 {cart.map((item, idx) => (
                   <tr key={idx} 
@@ -253,10 +290,39 @@ const handleClear = () => {
                     }}
                     onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#d1f0ff")}
                     onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = idx % 2 === 0 ? "#ecf0f1" : "#ffffff")}>
-                    <td style={{ padding: "8px", textAlign:"left"}}>{item.item_name}</td>
-                    <td style={{ padding: "8px", textAlign:"left"}}>{item.qty}</td>
-                    <td style={{ padding: "8px", textAlign:"left"}}>{item.price}</td>
-                    <td style={{ padding: "8px", textAlign:"left"}}>{item.rowTotal.toFixed(2)}</td>
+                      <td style={{ padding: "8px", textAlign:"left"}}>{item.item_name}</td>
+                      
+                      {/* Editable Quantity */}
+                      <td style={{ padding: "8px", textAlign:"left"}}>
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.qty}
+                          onChange={(e) => updateCartItem(idx, parseInt(e.target.value))}
+                          style={{ width: "60px", padding: "5px" }}
+                        />
+                      </td>
+
+                      <td style={{ padding: "8px", textAlign:"left"}}>{item.price}</td>
+                      <td style={{ padding: "8px", textAlign:"left"}}>{item.rowTotal.toFixed(2)}</td>
+
+                      {/* Delete Button */}
+                      <td style={{ padding: "8px", textAlign:"center" }}>
+                        <button
+                          onClick={() => deleteCartItem(idx)}
+                          style={{
+                            background: "#e74c3c",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "4px",
+                            padding: "5px 10px",
+                            cursor: "pointer"
+                          }}
+                        >
+                          ❌
+                        </button>
+                      </td>
+
                   </tr>
                 ))}
               </tbody>
@@ -277,8 +343,10 @@ const handleClear = () => {
             <input type="number" value={card} onChange={(e) => setCard(Number(e.target.value))} />
           </div>
           {/* Save Sale */}
+
           <button
               onClick={handleSubmit}
+              hidden={!isPaymentValid}
               style={{
                 background: "#27ae60",
                 color: "#fff",
@@ -291,13 +359,14 @@ const handleClear = () => {
             >
               💾 Submit & Print
             </button>
-
+{/* 
           <button
             onClick={handlePrint}
+            hidden={!isPaymentValid}
             style={{ background: "#2980b9", color: "#fff", border: "none", padding: "10px 15px", borderRadius: "6px", cursor: "pointer", marginTop: "10px" }}
           >
             🖨 Print Bill
-          </button>
+          </button> */}
             <button
               onClick={handleClear}
               style={{
