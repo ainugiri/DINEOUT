@@ -1,4 +1,6 @@
+// ------------ SalesPage.jsx ------------------------
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function SalesPage() {
   const [id, setId] = useState("");
@@ -11,6 +13,19 @@ export default function SalesPage() {
   const [upi, setUpi] = useState(0);
   const [card, setCard] = useState(0);
   const receiptRef = useRef();
+    const navigate = useNavigate();
+  const [hoverIndex, setHoverIndex] = useState(null);
+
+const menuItems = [
+    { title: "DASHBOARD", color: "#ff6f61", hover: "#20b2aa", path: "/dashboard" },
+    { title: "REPORTS", color: "#6a5acd", hover: "#3cb371", path: "/Pages/reports" },
+    { title: "SETTINGS", color: "#ffa500", hover: "#9370db", path: "/Pages/settings" },
+    { title: "EMPLOYEE MGMT", color: "#20b2aa", hover: "#ff6f61", path: "/Pages/employee" },
+    { title: "STOCK", color: "#ff4500", hover: "#ff6f61", path: "/Pages/stock" },
+    { title: "ORDERS", color: "#3cb371", hover: "#6a5acd", path: "/orders" },
+    { title: "CUSTOMERS", color: "#9370db", hover: "#20b2aa", path: "/Pages/customers" }
+];
+
 
 
   // Fetch by ID
@@ -59,84 +74,69 @@ export default function SalesPage() {
   };
 
   const updateCartItem = (index, newQty) => {
-  if (newQty <= 0) return; // avoid invalid qty
-  const updatedCart = [...cart];
-  updatedCart[index].qty = newQty;
-  updatedCart[index].rowTotal = updatedCart[index].price * newQty;
-  setCart(updatedCart);
-};
-
-
-
-const deleteCartItem = (index) => {
-  const updatedCart = cart.filter((_, idx) => idx !== index);
-  setCart(updatedCart);
-};
-
-const handleSubmit = async () => {
-  if (overallTotal <= 0) {
-    alert("No items to save!");
-    return;
-  }
-
-  // First: Insert into Sales table
-  const saleData = {
-    total_amount: overallTotal,
-    cash_amount: cash,
-    upi_amount: upi,
-    card_amount: card,
+    if (newQty <= 0) return;
+    const updatedCart = [...cart];
+    updatedCart[index].qty = newQty;
+    updatedCart[index].rowTotal = updatedCart[index].price * newQty;
+    setCart(updatedCart);
   };
 
-  try {
-    // Save sale first
-    const saleRes = await fetch("http://localhost:5000/sales", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(saleData),
-    });
+  const deleteCartItem = (index) => {
+    const updatedCart = cart.filter((_, idx) => idx !== index);
+    setCart(updatedCart);
+  };
 
-    if (!saleRes.ok) throw new Error("Failed to save sale");
-
-    // Get newly created sale_id
-    const { sale_id } = await saleRes.json();
-
-    // Then save items into sale_items
-    for (const item of cart) {
-      const itemData = {
-        sale_id: sale_id,
-        menu_id: item.item_id, // menu_id from menu table
-        quantity: item.qty,
-        price: item.price,
-        total: item.rowTotal,
-      };
-
-      const itemRes = await fetch("http://localhost:5000/sale_items", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(itemData),
-      });
-
-      if (!itemRes.ok) throw new Error("Failed to save item");
+  const handleSubmit = async () => {
+    if (overallTotal <= 0) {
+      alert("No items to save!");
+      return;
     }
 
-    alert("Sale saved successfully!");
-    handlePrint(); // Print after saving
+    const saleData = {
+      total_amount: overallTotal,
+      cash_amount: cash,
+      upi_amount: upi,
+      card_amount: card,
+      items: cart.map(item => ({
+            item_id: item.item_id,
+            item_name: item.item_name,
+            qty: item.qty,
+            price: item.price,
+            rowTotal: item.rowTotal,
+          })),
+    };
 
-  } catch (err) {
-    alert(err.message);
-  }
-};
-const handleClear = () => {
-  setId("");
-  setTerm("");
-  setResults([]);
-  setSelectedItem(null);
-  setQty(1);
-  setCart([]);
-  setCash(0);
-  setUpi(0);
-  setCard(0);
-};
+    try {
+      const saleRes = await fetch("http://localhost:5000/sales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(saleData),
+      });
+      const data = await saleRes.json();
+    if (!saleRes.ok) throw new Error(data.error || "Failed to save sale");
+
+      const { sale_id } = data;
+      alert(`Sale saved successfully! (ID: ${sale_id})`);
+      const bNo = sale_id;
+      saleData.sale_id = bNo; // add sale_id to saleData for printing
+      handlePrint({ saleData });
+      handleClear();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleClear = () => {
+    setId("");
+    setTerm("");
+    setResults([]);
+    setSelectedItem(null);
+    setQty(1);
+    setCart([]);
+    setCash(0);
+    setUpi(0);
+    setCard(0);
+  };
 
   const addToCart = () => {
     if (!selectedItem || qty <= 0) {
@@ -152,53 +152,201 @@ const handleClear = () => {
   };
 
   const overallTotal = cart.reduce((sum, item) => sum + item.rowTotal, 0);
-
-  const handlePrint = () => {
-    const printContents = receiptRef.current.innerHTML;
-    const printWindow = window.open("", "_blank", "width=400,height=600");
-    const currentDate = new Date().toLocaleString();
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Receipt</title>
-          <style>
-            body { font-family: monospace; font-size: 14px; padding: 10px; }
-            h2 { text-align: center; margin-bottom: 2px; }
-            .date { text-align: center; font-size: 12px; margin-bottom: 10px; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { text-align: left; padding: 4px; }
-            tr.border-bottom td { border-bottom: 1px dashed #000; }
-            .total { font-weight: bold; border-top: 2px solid #000; padding-top: 5px; }
-            .footer { text-align: center; margin-top: 10px; font-size: 12px; }
-          </style>
-        </head>
-        <body>
-          <h2>Dine Out Biriyani</h2>
-          <div class="date">${currentDate}</div>
-          ${printContents}
-          <div class="footer">
-            Thank You for letting us serve you.<br/>
-            Please Visit Again.
-          </div>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-    printWindow.close();
-    setCart([]); 
-    setCash(0);
-    setUpi(0);
-    setCard(0);
-  };
   const paymentTotal = cash + upi + card;
   const isPaymentValid = paymentTotal === overallTotal;
 
-  return (
-    <div style={{ padding: "20px", maxWidth: "900px", margin: "0 auto", fontFamily: "Arial" }}>
-      <h1 style={{ textAlign: "center", color: "#d35400" }}>Dine Out Biriyani</h1>
+  const handlePrint = (data) => {
+  // unwrap the nested saleData
+  // console.log(data);
+  const bNo = data.saleData ? data.saleData.sale_id : "N/A";
+  const saleData = data.saleData || data;
+    console.log(saleData);
+  const { total_amount, cash_amount, upi_amount, card_amount, items } = saleData;
 
+    const receiptWidth = 40; // total characters per line
+
+  // Helper to center text
+  const centerText = (text, width) => {
+    if (text.length >= width) return text; // no centering if too long
+    const spaces = Math.floor((width - text.length) / 2);
+    return " ".repeat(spaces) + text;
+  };
+
+  // Column widths for table
+  const colWidths = { id: 4, name: 20, qty: 5, price: 6, total: 5 };
+  const pad = (text, width, align = "left") => {
+    text = text.toString();
+    if (text.length > width) return text.slice(0, width);
+    if (align === "left") return text.padEnd(width, " ");
+    if (align === "right") return text.padStart(width, " ");
+    return centerText(text, width);
+  };
+  let receiptText = "";
+  receiptText += centerText ("Dine Out Biriyani \n", receiptWidth);
+  receiptText += centerText("Heaven for Biriyani Hunters\n", receiptWidth);
+  receiptText += centerText("9840 201 202\n", receiptWidth);
+  receiptText += centerText("HIG 64, NH - 1, Maraimalai Nagar\n", receiptWidth);
+  receiptText += centerText("Chennai\n", receiptWidth);
+  receiptText += centerText("\n", receiptWidth);
+  receiptText += `Bill No: ${bNo}    Date: ${new Date().toLocaleString()}\n`;
+  receiptText += centerText("\n", receiptWidth);
+  receiptText += centerText("\n", receiptWidth);
+  receiptText += `${pad("ID", colWidths.id)} ${pad("Name", colWidths.name)} ${pad("Qty", colWidths.qty)} ${pad("Price", colWidths.price)} ${pad("Total", colWidths.total)}\n`;
+  receiptText += "-".repeat(colWidths.id + colWidths.name + colWidths.qty + colWidths.price + colWidths.total + 4) + "\n";
+
+  items.forEach((item) => {
+    receiptText += `${pad(item.item_id, colWidths.id)} ${pad(item.item_name, colWidths.name)} ${pad(item.qty, colWidths.qty)} ${pad(parseFloat(item.price).toFixed(2), colWidths.price, "right")} ${pad(parseFloat(item.rowTotal).toFixed(2), colWidths.total, "right")}\n`;
+  });
+
+  receiptText += "-".repeat(colWidths.id + colWidths.name + colWidths.qty + colWidths.price + colWidths.total + 4) + "\n";
+  receiptText += `TOTAL: ₹${total_amount}\n`;
+  receiptText += `Cash: ₹${cash_amount}   UPI: ₹${upi_amount}   Card: ₹${card_amount}\n`;
+  receiptText += "-".repeat(colWidths.id + colWidths.name + colWidths.qty + colWidths.price + colWidths.total + 4) + "\n";
+  receiptText += centerText("\n", receiptWidth);
+  receiptText += centerText("\n", receiptWidth);
+  receiptText += centerText("Thank You for letting us serve you!\n", receiptWidth);
+  receiptText += centerText("Please Visit Again.\n", receiptWidth);
+
+  const printWindow = window.open("", "_blank");
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>Receipt</title>
+        <style>
+          body { font-family: monospace; font-size: 14px; white-space: pre; }
+        </style>
+      </head>
+      <body>
+        <pre>${receiptText}</pre>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+  printWindow.close();
+
+  // const currentDate = new Date().toLocaleString();
+  // let billNo = Math.floor(Math.random() * 100000); // you can get real sale_id if needed
+
+  // // Build receipt text
+  // let receiptText = `
+  //       Dine Out Biriyani
+  //       -------------------------
+  //       Bill No: ${billNo}
+  //       Date   : ${currentDate}
+  //       -------------------------
+  //       Sl.No  Item        P   Q   T
+  //       -------------------------
+  // `;
+
+  // cart.forEach((item, idx) => {
+  //   // truncate item name for narrow paper
+  //   const itemName = item.item_name.substring(0, 10).padEnd(10, " ");
+  //   const price = item.price.toFixed(2).padStart(5, " ");
+  //   const qty = String(item.qty).padStart(3, " ");
+  //   const total = item.rowTotal.toFixed(2).padStart(6, " ");
+  //   receiptText += `${String(idx + 1).padEnd(5, " ")} ${itemName}${price}${qty}${total}\n`;
+  // });
+
+  // receiptText += `
+  //       -------------------------
+  //       Overall Total : ₹${overallTotal.toFixed(2)}
+  //       -------------------------
+  //       Thank You for letting us serve you
+  //       Please Visit Again
+  // `;
+
+  // // Open print window
+  // const printWindow = window.open("", "_blank", "width=400,height=600");
+  // printWindow.document.write(`
+  //   <html>
+  //     <head>
+  //       <title>Receipt</title>
+  //       <style>
+  //         body { font-family: monospace; font-size: 12px; white-space: pre; }
+  //         pre { margin: 0; }
+  //       </style>
+  //     </head>
+  //     <body>
+  //       <pre>${receiptText}</pre>
+  //     </body>
+  //   </html>
+  // `);
+  // printWindow.document.close();
+  // printWindow.focus();
+  // printWindow.print();
+  // printWindow.close();
+
+  // // reset cart & payments
+  // setCart([]);
+  // setCash(0);
+  // setUpi(0);
+  // setCard(0);
+};
+  
+const styles = {
+  page: {
+    fontFamily: "Arial, sans-serif",
+    backgroundColor: "#f8f8f8",
+    minHeight: "100vh",
+    padding: "20px"
+  },
+  header: {
+    textAlign: "center",
+    marginBottom: "30px",
+    color: "#333"
+  },
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+    gap: "20px"
+  },
+  tile: {
+    color: "#fff",
+    padding: "1px",
+    borderRadius: "2px",
+    textAlign: "center",
+    fontSize: ".5em",
+    fontWeight: "bold",
+    boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+    cursor: "pointer",
+    transition: "transform 0.2s ease, box-shadow 0.2s ease, background-color 0.3s ease",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center"
+  }
+};
+
+
+  return (
+      <div style={{ padding: "20px", maxWidth: "900px", margin: "0 auto", fontFamily: "Arial" }}>
+        <h1 style={{ textAlign: "center", color: "#d35400" }}>Dine Out Biriyani</h1>
+        
+      <div>
+      <header style={styles.header}>
+        <h1 style={{ margin: 0 }}>🍽️ Dine Out Cafeteria - Biriyani Master </h1>
+        <h2 style={{ margin: 0 }}>Your one-stop solution for Biriyani Hunters</h2>
+      </header>
+
+      <div style={styles.grid}>
+        {menuItems.map((item, index) => (
+          <div
+            key={index}
+            onClick={() => navigate(item.path)}
+            onMouseEnter={() => setHoverIndex(index)}
+            onMouseLeave={() => setHoverIndex(null)}
+            style={{
+              ...styles.tile,
+              backgroundColor: hoverIndex === index ? item.hover : item.color
+            }}
+          >
+            <h3>{item.title}</h3>
+          </div>
+        ))}
+      </div>
+        </div>
+        
       {/* Search Section */}
       <div style={{ display: "flex", gap: "20px", background: "#fff8e7", padding: "15px", borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.1)", marginBottom: "20px" }}>
         
@@ -271,16 +419,16 @@ const handleClear = () => {
       {cart.length > 0 && (
         <div>
           <div ref={receiptRef}>
-          <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "10px" }}>
-<thead>
-  <tr style={{ backgroundColor: "#3498db", color: "#fff" }}>
-    <th style={{ padding: "8px", textAlign:"left" }}>Item</th>
-    <th style={{ padding: "8px", textAlign:"left" }}>Qty</th>
-    <th style={{ padding: "8px", textAlign:"left" }}>Price</th>
-    <th style={{ padding: "8px", textAlign:"left" }}>Total</th>
-    <th style={{ padding: "8px", textAlign:"center" }}>Action</th>
-  </tr>
-</thead>
+            <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "10px" }}>
+              <thead>
+                <tr style={{ backgroundColor: "#3498db", color: "#fff" }}>
+                  <th style={{ padding: "8px", textAlign:"left" }}>Item</th>
+                  <th style={{ padding: "8px", textAlign:"left" }}>Qty</th>
+                  <th style={{ padding: "8px", textAlign:"left" }}>Price</th>
+                  <th style={{ padding: "8px", textAlign:"left" }}>Total</th>
+                  <th style={{ padding: "8px", textAlign:"center" }}>Action</th>
+                </tr>
+              </thead>
               <tbody>
                 {cart.map((item, idx) => (
                   <tr key={idx} 
@@ -291,8 +439,6 @@ const handleClear = () => {
                     onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#d1f0ff")}
                     onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = idx % 2 === 0 ? "#ecf0f1" : "#ffffff")}>
                       <td style={{ padding: "8px", textAlign:"left"}}>{item.item_name}</td>
-                      
-                      {/* Editable Quantity */}
                       <td style={{ padding: "8px", textAlign:"left"}}>
                         <input
                           type="number"
@@ -302,11 +448,8 @@ const handleClear = () => {
                           style={{ width: "60px", padding: "5px" }}
                         />
                       </td>
-
                       <td style={{ padding: "8px", textAlign:"left"}}>{item.price}</td>
                       <td style={{ padding: "8px", textAlign:"left"}}>{item.rowTotal.toFixed(2)}</td>
-
-                      {/* Delete Button */}
                       <td style={{ padding: "8px", textAlign:"center" }}>
                         <button
                           onClick={() => deleteCartItem(idx)}
@@ -322,7 +465,6 @@ const handleClear = () => {
                           ❌
                         </button>
                       </td>
-
                   </tr>
                 ))}
               </tbody>
@@ -342,45 +484,36 @@ const handleClear = () => {
             <label>Card: </label>
             <input type="number" value={card} onChange={(e) => setCard(Number(e.target.value))} />
           </div>
+
           {/* Save Sale */}
-
           <button
-              onClick={handleSubmit}
-              hidden={!isPaymentValid}
-              style={{
-                background: "#27ae60",
-                color: "#fff",
-                border: "none",
-                padding: "10px 15px",
-                borderRadius: "6px",
-                cursor: "pointer",
-                marginTop: "10px"
-              }}
-            >
-              💾 Submit & Print
-            </button>
-{/* 
-          <button
-            onClick={handlePrint}
+            onClick={handleSubmit}
             hidden={!isPaymentValid}
-            style={{ background: "#2980b9", color: "#fff", border: "none", padding: "10px 15px", borderRadius: "6px", cursor: "pointer", marginTop: "10px" }}
+            style={{
+              background: "#27ae60",
+              color: "#fff",
+              border: "none",
+              padding: "10px 15px",
+              borderRadius: "6px",
+              cursor: "pointer",
+              marginTop: "10px"
+            }}
           >
-            🖨 Print Bill
-          </button> */}
-            <button
-              onClick={handleClear}
-              style={{
-                background: "#c0392b",
-                color: "#fff",
-                border: "none",
-                padding: "10px 15px",
-                borderRadius: "6px",
-                cursor: "pointer"
-              }}
-            >
-              ❌ Clear
-            </button>
-
+            💾 Submit & Print
+          </button>
+          <button
+            onClick={handleClear}
+            style={{
+              background: "#c0392b",
+              color: "#fff",
+              border: "none",
+              padding: "10px 15px",
+              borderRadius: "6px",
+              cursor: "pointer"
+            }}
+          >
+            ❌ Clear
+          </button>
         </div>
       )}
     </div>
